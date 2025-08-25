@@ -8,22 +8,22 @@ Tools for recovering deleted assets from Google Ads campaigns and migrating betw
 **Purpose**: Copy keywords and RSAs from a REMOVED ad group into an existing ad group with intelligent deduplication.
 
 **Key Features**:
-- ✅ **Idempotent**: Safe to re-run multiple times
-- 🔍 **Deduplication**: Automatically skips existing keywords and RSAs
-- 🎯 **Match Type Control**: Force exact match for all recovered keywords
-- ⏸️ **Safety Controls**: Option to create items in paused state
-- ❌ **Negative Keywords**: Optional copying of negative keywords
-- 🧪 **Dry Run Mode**: Preview all changes before execution
+- **Idempotent**: Safe to re-run multiple times
+- **Deduplication**: Automatically skips existing keywords and RSAs
+- **Match Type Control**: Force exact match for all recovered keywords
+- **Safety Controls**: Option to create items in paused state
+- **Negative Keywords**: Optional copying of negative keywords
+- **Dry Run Mode**: Preview all changes before execution
 
 ### `rebuild_etas_as_rsas.py`
 **Purpose**: Convert legacy Expanded Text Ads (ETAs) to Responsive Search Ads (RSAs) with intelligent content handling.
 
 **Key Features**:
-- 📌 **Pinning Options**: ETA-like pinning or flexible Google optimization
-- 🔧 **Content Padding**: Handle ETAs with insufficient headlines/descriptions
-- 🎯 **Deduplication**: Skip RSAs that already exist with same content
-- ⏸️ **Safety Controls**: Create new RSAs in paused state
-- 🧪 **Dry Run Mode**: Preview all conversions before execution
+- **Pinning Options**: ETA-like pinning or flexible Google optimization
+- **Content Padding**: Handle ETAs with insufficient headlines/descriptions
+- **Deduplication**: Skip RSAs that already exist with same content
+- **Safety Controls**: Create new RSAs in paused state
+- **Dry Run Mode**: Preview all conversions before execution
 
 ## Recovery Tool Usage
 
@@ -182,10 +182,10 @@ Always available for preview:
 ```
 
 ### Validation Checks
-- ✅ Source ad group accessibility verification
-- ✅ Destination ad group existence check  
-- ✅ Customer account access validation
-- ✅ API connectivity testing
+- Source ad group accessibility verification
+- Destination ad group existence check  
+- Customer account access validation
+- API connectivity testing
 
 ### Error Recovery
 - **Partial Failures**: Operations continue after individual item failures

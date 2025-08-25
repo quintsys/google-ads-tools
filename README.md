@@ -2,9 +2,9 @@
 
 A comprehensive collection of Python and shell tools for managing Google Ads campaigns, including authentication, auditing, analysis, recovery, and data processing capabilities.
 
-## 📁 Tool Categories
+## Tool Categories
 
-### 🔐 [Authentication & Account Discovery](./auth/)
+### [Authentication & Account Discovery](./auth/)
 Tools for OAuth setup and account hierarchy exploration.
 
 | Tool | Description | Usage |
@@ -13,14 +13,14 @@ Tools for OAuth setup and account hierarchy exploration.
 | `list_accessible_customers.py` | List all accessible customer accounts | `python list_accessible_customers.py` |
 | `list_hierarchy_check_target.py` | Check account hierarchy and find specific customer IDs | `python list_hierarchy_check_target.py` |
 
-### 🔍 [Audit & Compliance](./audit/)
+### [Audit & Compliance](./audit/)
 Comprehensive auditing tools for campaign health and compliance.
 
 | Tool | Description | Key Features |
 |------|-------------|--------------|
-| `ads_audit.py` | Complete Google Ads URL and RSA audit tool | • URL validation (HTTPS, UTM params)<br/>• Domain mismatch detection<br/>• HTTP status checking<br/>• UTM parameter enforcement<br/>• RSA asset auditing<br/>• Landing page analysis |
+| `ads_audit.py` | Complete Google Ads URL and RSA audit tool | URL validation (HTTPS, UTM params), Domain mismatch detection, HTTP status checking, UTM parameter enforcement, RSA asset auditing, Landing page analysis |
 
-### 📊 [Analysis & Reporting](./analysis/)
+### [Analysis & Reporting](./analysis/)
 Tools for analyzing campaign data and generating reports.
 
 | Tool | Description | Usage |
@@ -28,15 +28,15 @@ Tools for analyzing campaign data and generating reports.
 | `list_positive_keywords.py` | List positive keywords in ad groups with match type counts | `python list_positive_keywords.py --customer-id CID --ad-group-id AGID` |
 | `list_rsas_summary.py` | Summary view of Responsive Search Ads (headlines, descriptions, URLs) | `python list_rsas_summary.py --customer-id CID --ad-group-id AGID` |
 
-### 🔧 [Recovery & Migration](./recovery/)
+### [Recovery & Migration](./recovery/)
 Tools for recovering deleted assets and migrating between ad types.
 
 | Tool | Description | Key Features |
 |------|-------------|--------------|
-| `recover_to_existing_ad_group.py` | Copy keywords and RSAs from removed ad groups | • Idempotent operation<br/>• Keyword deduplication<br/>• Copy negatives option<br/>• Pause on create<br/>• Match type forcing |
-| `rebuild_etas_as_rsas.py` | Convert legacy ETAs to Responsive Search Ads | • ETA-like pinning<br/>• Padding modes<br/>• RSA deduplication<br/>• Safe filler content |
+| `recover_to_existing_ad_group.py` | Copy keywords and RSAs from removed ad groups | Idempotent operation, Keyword deduplication, Copy negatives option, Pause on create, Match type forcing |
+| `rebuild_etas_as_rsas.py` | Convert legacy ETAs to Responsive Search Ads | ETA-like pinning, Padding modes, RSA deduplication, Safe filler content |
 
-### 📈 [Data Processing](./data-processing/)
+### [Data Processing](./data-processing/)
 Tools for processing and transforming campaign data.
 
 | Tool | Description | Usage |
@@ -44,7 +44,7 @@ Tools for processing and transforming campaign data.
 | `expand_geo.py` | Generate geographic keyword variations (states, metros) | `python expand_geo.py --input seeds.csv --output expanded.csv --mode states` |
 | `txt_to_seed_csv.sh` | Convert text keyword list to Google Ads CSV format | `./txt_to_seed_csv.sh keywords.txt seeds.csv "Campaign Name" "Ad Group"` |
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -130,7 +130,7 @@ python recovery/recover_to_existing_ad_group.py \
 python data-processing/expand_geo.py --input seeds.csv --output geo-expanded.csv --mode states
 ```
 
-## 📋 Common Command Line Arguments
+## Common Command Line Arguments
 
 ### Global Arguments
 - `--customer-id`: Google Ads customer ID (without dashes)
@@ -154,7 +154,7 @@ python data-processing/expand_geo.py --input seeds.csv --output geo-expanded.csv
 - `--pause-on-create`: Create new items in paused state
 - `--copy-negatives`: Include negative keywords in recovery
 
-## 🔧 Tool Configuration
+## Tool Configuration
 
 ### UTM Parameter Enforcement
 The audit tool supports sophisticated UTM parameter validation:
@@ -209,7 +209,7 @@ All recovery tools include safety mechanisms:
 └── out/                             # Output directory for generated files
 ```
 
-## 📖 Additional Documentation
+## Additional Documentation
 
 - [`recovery.md`](./recovery.md) - Comprehensive recovery runbook with step-by-step procedures
 - Each tool folder contains specific documentation for that category
@@ -222,7 +222,7 @@ When adding new tools:
 3. Include proper error handling and dry-run capabilities
 4. Follow the established command-line argument patterns
 
-## ⚠️ Important Notes
+## Important Notes
 
 - Always use `--dry-run` first when using recovery tools
 - Keep your `~/.google-ads.yaml` file secure and never commit it to version control

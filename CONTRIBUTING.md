@@ -2,7 +2,7 @@
 
 Thank you for your interest in contributing to this project! This toolkit helps manage Google Ads campaigns through a comprehensive set of Python and shell tools.
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Python 3.8 or higher
@@ -25,7 +25,7 @@ pip install -r requirements.txt
 # Configure Google Ads API (see auth/README.md for details)
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 The project is organized into functional categories:
 - `auth/` - Authentication and account discovery
@@ -34,7 +34,7 @@ The project is organized into functional categories:
 - `recovery/` - Asset recovery and migration
 - `data-processing/` - Data transformation utilities
 
-## 🤝 How to Contribute
+## How to Contribute
 
 ### Reporting Issues
 1. Check existing issues to avoid duplicates
@@ -173,7 +173,7 @@ When adding a new tool:
    - Reference any related issues
    - Provide usage examples for new features
 
-## 🔍 Code Review Guidelines
+## Code Review Guidelines
 
 **For Reviewers:**
 - Check for security issues (credential handling, input validation)
@@ -221,4 +221,4 @@ By contributing to this project, you agree that your contributions will be licen
 
 ---
 
-Thank you for helping make this toolkit better for the Google Ads community! 🚀
+Thank you for helping make this toolkit better for the Google Ads community!�

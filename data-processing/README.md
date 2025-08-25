@@ -8,19 +8,19 @@ Tools for transforming and processing Google Ads campaign data, including keywor
 **Purpose**: Generate geographic keyword variations by expanding seed keywords with US states, metro areas, or both.
 
 **Key Features**:
-- 🗺️ **Multiple Expansion Modes**: States, metros, or combined
-- 📊 **Flexible Output**: Control original keyword inclusion
-- 🎯 **Smart Combinations**: Prefix and suffix variations
-- 📁 **CSV Processing**: Maintains Google Ads CSV format compatibility
+- **Multiple Expansion Modes**: States, metros, or combined
+- **Flexible Output**: Control original keyword inclusion
+- **Smart Combinations**: Prefix and suffix variations
+- **CSV Processing**: Maintains Google Ads CSV format compatibility
 
 ### `txt_to_seed_csv.sh`
 **Purpose**: Convert a simple text file of keywords into Google Ads CSV bulk upload format.
 
 **Key Features**:
-- 📝 **Simple Input**: Plain text file, one keyword per line
-- 📊 **CSV Output**: Properly formatted for Google Ads Editor
-- ⚙️ **Configurable**: Customizable campaign, ad group, and match type
-- 🧹 **Clean Processing**: Handles line endings and empty lines
+- **Simple Input**: Plain text file, one keyword per line
+- **CSV Output**: Properly formatted for Google Ads Editor
+- **Configurable**: Customizable campaign, ad group, and match type
+- **Clean Processing**: Handles line endings and empty lines
 
 ## Geographic Expansion Tool
 

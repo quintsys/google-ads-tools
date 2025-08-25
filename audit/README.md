@@ -9,13 +9,13 @@ Tools for comprehensive auditing of Google Ads campaigns, including URL validati
 
 ## Core Features
 
-### 🔍 URL & Landing Page Analysis
+### URL & Landing Page Analysis
 - **HTTPS Validation**: Identifies non-secure URLs
 - **Domain Mismatch Detection**: Compares display URLs with final URLs
 - **HTTP Status Checking**: Probes URLs for accessibility (optional)
 - **Landing Page Aggregation**: Analyzes traffic data from landing_page_view
 
-### 📊 UTM Parameter Enforcement
+### UTM Parameter Enforcement
 - **Required Parameters**: Enforce presence of specific UTM parameters
 - **Case Validation**: Enforce lowercase/uppercase for UTM values
 - **Exact Value Matching**: Validate UTM parameters against expected values
@@ -24,12 +24,12 @@ Tools for comprehensive auditing of Google Ads campaigns, including URL validati
 - **Duplicate Detection**: Find URLs with duplicate UTM parameters
 - **Empty Value Detection**: Identify UTM parameters with blank values
 
-### 🎯 RSA Asset Auditing
+### RSA Asset Auditing
 - **Asset Status**: Track enabled/disabled RSA assets
 - **Policy Compliance**: Check asset approval status
 - **Text Content Analysis**: Extract headlines and descriptions
 
-### 📈 Reporting & Output
+### Reporting & Output
 Generates comprehensive CSV reports:
 - `ads.csv` - Ad-level data with URLs and metadata
 - `rsa_assets.csv` - RSA headline and description assets

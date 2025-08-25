@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ads_audit.py — Google Ads URL & RSA audit
+ads_audit.py — Google Ads URL, RSA, and UTM audit
 
 Requirements:
   pip install google-ads==21.0.0 requests tldextract
@@ -13,10 +13,13 @@ Usage:
   python ads_audit.py --customer-id 1234567890 --out ./out --check-http --timeout 5
 
 Outputs:
-  ./out/ads.csv              # one row per ad
-  ./out/rsa_assets.csv       # one row per RSA asset (headline/description)
-  ./out/landing_pages.csv    # URL-level aggregation from landing_page_view
-  ./out/findings.csv         # audit findings (one row per finding)
+  ./out/ads.csv                     # one row per ad
+  ./out/rsa_assets.csv              # one row per RSA asset (headline/description)
+  ./out/landing_pages.csv           # URL-level aggregation from landing_page_view (unexpanded)
+  ./out/expanded_landing_pages.csv  # URL-level aggregation after redirects
+  ./out/ad_url_map.csv              # ad_id → URL(s) crosswalk for UI lookups
+  ./out/sitelink_urls.csv           # sitelink asset URLs by campaign/ad group
+  ./out/findings.csv                # audit findings (one row per finding)
 """
 from __future__ import annotations
 
@@ -85,6 +88,33 @@ SELECT
   metrics.impressions
 FROM landing_page_view
 WHERE segments.date DURING LAST_30_DAYS
+"""
+
+GAQL_EXPANDED_LANDING_PAGES = """
+SELECT
+  customer.id,
+  expanded_landing_page_view.expanded_final_url,
+  metrics.clicks,
+  metrics.impressions
+FROM expanded_landing_page_view
+WHERE segments.date DURING LAST_30_DAYS
+"""
+
+# Sitelink URLs at both campaign and ad group levels
+GAQL_SITELINKS = """
+SELECT
+  customer.id,
+  asset.id,
+  asset.name,
+  asset.sitelink_asset.link_text,
+  asset.sitelink_asset.final_urls,
+  asset.sitelink_asset.final_mobile_urls,
+  campaign.id,
+  ad_group.id
+FROM asset
+LEFT JOIN campaign_asset ON campaign_asset.asset = asset.resource_name
+LEFT JOIN ad_group_asset ON ad_group_asset.asset = asset.resource_name
+WHERE asset.type = 'SITELINK'
 """
 
 
@@ -177,9 +207,34 @@ def rows_ads(client: GoogleAdsClient, customer_id: str, api_version: str) -> Lis
             "final_mobile_urls": [u for u in ad.final_mobile_urls],
             "display_url": ad.display_url if getattr(ad, "display_url", None) else "",
             "tracking_url_template": ad.tracking_url_template if getattr(ad, "tracking_url_template", None) else "",
-            "url_custom_parameters": [{ "key": p.key, "value": p.value } for p in ad.url_custom_parameters],
-            })
+            "url_custom_parameters": [{"key": p.key, "value": p.value} for p in ad.url_custom_parameters],
+        })
     return out
+
+
+def rows_ad_url_crosswalk(ads_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Create one row per (ad_id, url, source) for easy lookups in UI."""
+    x = []
+    for r in ads_rows:
+        for u in r.get("final_urls", []) or []:
+            x.append({
+                "ad_id": r["ad_id"],
+                "campaign_id": r["campaign_id"],
+                "ad_group_id": r["ad_group_id"],
+                "url": u,
+                "url_no_query": u.split("?", 1)[0],
+                "source": "ad.final_urls",
+            })
+        for u in r.get("final_mobile_urls", []) or []:
+            x.append({
+                "ad_id": r["ad_id"],
+                "campaign_id": r["campaign_id"],
+                "ad_group_id": r["ad_group_id"],
+                "url": u,
+                "url_no_query": u.split("?", 1)[0],
+                "source": "ad.final_mobile_urls",
+            })
+    return x
 
 
 def rows_rsa_assets(client: GoogleAdsClient, customer_id: str, api_version: str) -> List[Dict[str, Any]]:
@@ -194,7 +249,7 @@ def rows_rsa_assets(client: GoogleAdsClient, customer_id: str, api_version: str)
             "asset_enabled": row.ad_group_ad_asset_view.enabled,
             "text": row.asset.text_asset.text if getattr(row.asset, "text_asset", None) else "",
             "asset_policy_status": row.asset.policy_summary.approval_status.name if getattr(row.asset, "policy_summary", None) else "",
-            })
+        })
     return out
 
 
@@ -207,7 +262,37 @@ def rows_landing_pages(client: GoogleAdsClient, customer_id: str, api_version: s
             "unexpanded_final_url": url,
             "clicks_last_30d": row.metrics.clicks,
             "impressions_last_30d": row.metrics.impressions,
-            })
+        })
+    return out
+
+
+def rows_expanded_landing_pages(client: GoogleAdsClient, customer_id: str, api_version: str) -> List[Dict[str, Any]]:
+    out = []
+    for row in fetch_stream(client, customer_id, GAQL_EXPANDED_LANDING_PAGES, api_version):
+        url = row.expanded_landing_page_view.expanded_final_url
+        out.append({
+            "customer_id": row.customer.id,
+            "expanded_final_url": url,
+            "clicks_last_30d": row.metrics.clicks,
+            "impressions_last_30d": row.metrics.impressions,
+        })
+    return out
+
+
+def rows_sitelinks(client: GoogleAdsClient, customer_id: str, api_version: str) -> List[Dict[str, Any]]:
+    out = []
+    for row in fetch_stream(client, customer_id, GAQL_SITELINKS, api_version):
+        a = row.asset
+        out.append({
+            "customer_id": row.customer.id,
+            "asset_id": a.id,
+            "asset_name": getattr(a, "name", "") or "",
+            "link_text": a.sitelink_asset.link_text if getattr(a, "sitelink_asset", None) else "",
+            "final_urls": list(getattr(a.sitelink_asset, "final_urls", [])),
+            "final_mobile_urls": list(getattr(a.sitelink_asset, "final_mobile_urls", [])),
+            "campaign_id": row.campaign.id if getattr(row, "campaign", None) else "",
+            "ad_group_id": row.ad_group.id if getattr(row, "ad_group", None) else "",
+        })
     return out
 
 
@@ -236,7 +321,7 @@ def audit_findings(
                 "severity": "error",
                 "issue": "No final_urls set",
                 "detail": "",
-                })
+            })
 
         if display_host:
             for u in final_urls:
@@ -247,7 +332,7 @@ def audit_findings(
                         "severity": "warn",
                         "issue": "Domain mismatch",
                         "detail": f"display={display_host} final={host} ({u})",
-                        })
+                    })
 
         for u in final_urls:
             if not is_https(u):
@@ -256,7 +341,7 @@ def audit_findings(
                     "severity": "warn",
                     "issue": "Non-HTTPS final URL",
                     "detail": u,
-                    })
+                })
             qs = parse_params(u)
             # Skip UTM checks when gclid present (optional)
             if allow_autotag_only and "gclid" in qs:
@@ -270,7 +355,7 @@ def audit_findings(
                         "severity": "warn",
                         "issue": "UTM missing",
                         "detail": f"{u} missing {','.join(missing)}",
-                        })
+                    })
                 # Empty or duplicate values
                 for k, vals in qs.items():
                     if k.startswith("utm_"):
@@ -280,23 +365,23 @@ def audit_findings(
                                 "severity": "warn",
                                 "issue": "UTM empty value",
                                 "detail": f"{u} {k}=",
-                                })
+                            })
                         if len(vals) > 1:
                             findings.append({
                                 "ad_id": ad_id,
                                 "severity": "info",
                                 "issue": "UTM duplicate parameter",
                                 "detail": f"{u} {k} has {len(vals)} values",
-                                })
+                            })
                         if utm_case in ("lower", "upper"):
-                            bad = [v for v in vals if (v != (v.lower() if utm_case=='lower' else v.upper()))]
+                            bad = [v for v in vals if (v != (v.lower() if utm_case == 'lower' else v.upper()))]
                             if bad:
                                 findings.append({
                                     "ad_id": ad_id,
                                     "severity": "info",
                                     "issue": "UTM case policy",
                                     "detail": f"{u} {k} not {utm_case}",
-                                    })
+                                })
                 # Exact value expectations
                 for k, expected in utm_expect_exact.items():
                     if k in qs:
@@ -307,7 +392,7 @@ def audit_findings(
                                 "severity": "warn",
                                 "issue": "UTM mismatch (exact)",
                                 "detail": f"{u} {k}='{val}' != '{expected}'",
-                                })
+                            })
                 # Regex expectations
                 for k, pattern in utm_expect_regex.items():
                     if k in qs:
@@ -318,7 +403,7 @@ def audit_findings(
                                 "severity": "warn",
                                 "issue": "UTM mismatch (pattern)",
                                 "detail": f"{u} {k}='{val}' !~ /{pattern}/",
-                                })
+                            })
             if check_http:
                 code, note = http_probe(u, timeout=timeout)
                 if code is None:
@@ -327,14 +412,14 @@ def audit_findings(
                         "severity": "error",
                         "issue": "HTTP check failed",
                         "detail": f"{u} error={note}",
-                        })
+                    })
                 elif code >= 400:
                     findings.append({
                         "ad_id": ad_id,
                         "severity": "error",
                         "issue": "HTTP non-2xx",
                         "detail": f"{u} status={code}",
-                        })
+                    })
 
         if mobile_urls == [] and final_urls:
             findings.append({
@@ -342,7 +427,7 @@ def audit_findings(
                 "severity": "info",
                 "issue": "No final_mobile_urls",
                 "detail": "Consider mobile-specific URLs if site differs",
-                })
+            })
 
         if template:
             # sanity: tracking templates usually contain {lpurl}
@@ -352,7 +437,7 @@ def audit_findings(
                     "severity": "warn",
                     "issue": "Tracking template missing {lpurl}",
                     "detail": template,
-                    })
+                })
 
     return findings
 
@@ -371,13 +456,13 @@ def main():
     parser.add_argument("--describe-accounts", action="store_true",
                         help="List account details (name, currency, tz, manager flag) and exit")
     # UTM enforcement
-    parser.add_argument("--utm-required", nargs="*", default=["utm_source","utm_medium","utm_campaign"],
+    parser.add_argument("--utm-required", nargs="*", default=["utm_source", "utm_medium", "utm_campaign"],
                         help="Space-separated required UTM keys")
     parser.add_argument("--utm-expect", action="append", default=[],
                         help="Exact expectation: key=value (repeatable)")
     parser.add_argument("--utm-match", action="append", default=[],
                         help="Regex expectation: key=/pattern/ (repeatable)")
-    parser.add_argument("--utm-case", choices=["lower","upper","none"], default="none",
+    parser.add_argument("--utm-case", choices=["lower", "upper", "none"], default="none",
                         help="Enforce case for UTM values (default: none)")
     parser.add_argument("--allow-autotag-only", action="store_true",
                         help="If gclid present, skip UTM checks for that URL")
@@ -442,14 +527,26 @@ def main():
         lps = rows_landing_pages(client, args.customer_id, args.api_version)
         print(f"  landing pages: {len(lps)}", file=sys.stderr)
 
+        print("Fetching expanded landing pages (last 30d) ...", file=sys.stderr)
+        try:
+            elps = rows_expanded_landing_pages(client, args.customer_id, args.api_version)
+            print(f"  expanded landing pages: {len(elps)}", file=sys.stderr)
+        except Exception:
+            elps = []
+            print("  expanded landing pages: (not available)", file=sys.stderr)
+
+        print("Fetching sitelinks ...", file=sys.stderr)
+        sitelinks = rows_sitelinks(client, args.customer_id, args.api_version)
+        print(f"  sitelink assets: {len(sitelinks)}", file=sys.stderr)
+
         print("Auditing URLs ...", file=sys.stderr)
         # Parse expectations into dicts
-        expect_exact = {}
+        expect_exact: Dict[str, str] = {}
         for item in args.utm_expect:
             if "=" in item:
                 k, v = item.split("=", 1)
                 expect_exact[k.strip()] = v.strip()
-        expect_regex = {}
+        expect_regex: Dict[str, str] = {}
         for item in args.utm_match:
             if "=" in item:
                 k, v = item.split("=", 1)
@@ -472,29 +569,46 @@ def main():
 
         # Write CSVs
         write_csv(
-                os.path.join(args.out, "ads.csv"),
-                ads,
-                [
-                    "customer_id","campaign_id","campaign_name","ad_group_id","ad_group_name",
-                    "ad_id","ad_name","ad_type","ad_status","ad_strength","policy_status",
-                    "final_urls","final_mobile_urls","display_url","tracking_url_template","url_custom_parameters"
-                    ],
-                )
+            os.path.join(args.out, "ads.csv"),
+            ads,
+            [
+                "customer_id","campaign_id","campaign_name","ad_group_id","ad_group_name",
+                "ad_id","ad_name","ad_type","ad_status","ad_strength","policy_status",
+                "final_urls","final_mobile_urls","display_url","tracking_url_template","url_custom_parameters"
+            ],
+        )
         write_csv(
-                os.path.join(args.out, "rsa_assets.csv"),
-                rsa,
-                ["campaign_id","ad_group_id","ad_id","ad_status","field_type","asset_enabled","text","asset_policy_status"],
-                )
+            os.path.join(args.out, "rsa_assets.csv"),
+            rsa,
+            ["campaign_id","ad_group_id","ad_id","ad_status","field_type","asset_enabled","text","asset_policy_status"],
+        )
         write_csv(
-                os.path.join(args.out, "landing_pages.csv"),
-                lps,
-                ["customer_id","unexpanded_final_url","clicks_last_30d","impressions_last_30d"],
-                )
+            os.path.join(args.out, "landing_pages.csv"),
+            lps,
+            ["customer_id","unexpanded_final_url","clicks_last_30d","impressions_last_30d"],
+        )
+        if elps:
+            write_csv(
+                os.path.join(args.out, "expanded_landing_pages.csv"),
+                elps,
+                ["customer_id","expanded_final_url","clicks_last_30d","impressions_last_30d"],
+            )
+        cross = rows_ad_url_crosswalk(ads)
         write_csv(
-                os.path.join(args.out, "findings.csv"),
-                findings,
-                ["ad_id","severity","issue","detail"],
-                )
+            os.path.join(args.out, "ad_url_map.csv"),
+            cross,
+            ["ad_id","campaign_id","ad_group_id","url","url_no_query","source"],
+        )
+        write_csv(
+            os.path.join(args.out, "sitelink_urls.csv"),
+            sitelinks,
+            ["customer_id","asset_id","asset_name","link_text","final_urls","final_mobile_urls","campaign_id","ad_group_id"],
+        )
+        write_csv(
+            os.path.join(args.out, "findings.csv"),
+            findings,
+            ["ad_id","severity","issue","detail"],
+        )
 
         print(f"Done. Files in: {os.path.abspath(args.out)}", file=sys.stderr)
 
