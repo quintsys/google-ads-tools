@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+
+# Google Ads configuration (SENSITIVE)
+.google-ads.yaml
+google-ads.yaml
+~/.google-ads.yaml
+
+# CSV data files (may contain sensitive data)
+*.csv
+!seeds.csv
+!example_*.csv
+
+# Text files that might contain keywords or data
+*.txt
+!requirements.txt
+!README.txt
+
+# Output directories
+out/
+output/
+results/
+audit-results/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Tool-specific
+.tool-versions
+.mise.toml
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup

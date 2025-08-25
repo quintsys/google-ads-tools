@@ -1,0 +1,15 @@
+# Google Ads API
+google-ads>=21.0.0
+
+# HTTP requests for URL validation
+requests>=2.31.0
+
+# Domain parsing for URL analysis
+tldextract>=3.4.0
+
+# OAuth flow for token generation
+google-auth-oauthlib>=1.0.0
+
+# Additional useful dependencies
+grpcio>=1.50.0
+grpcio-status>=1.50.0
