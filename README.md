@@ -18,7 +18,7 @@ Comprehensive auditing tools for campaign health and compliance.
 
 | Tool | Description | Key Features |
 |------|-------------|--------------|
-| `ads_audit.py` | Complete Google Ads URL and RSA audit tool | URL validation (HTTPS, UTM params), Domain mismatch detection, HTTP status checking, UTM parameter enforcement, RSA asset auditing, Landing page analysis |
+| `ads_audit.py` | Complete Google Ads URL and RSA audit tool | URL validation (HTTPS, UTM params), Domain mismatch detection, HTTP status checking, UTM parameter enforcement, RSA asset auditing, Landing page analysis, Sitelink asset mapping, Ad-URL crosswalk generation |
 
 ### [Analysis & Reporting](./analysis/)
 Tools for analyzing campaign data and generating reports.

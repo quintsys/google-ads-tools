@@ -5,7 +5,7 @@ Tools for comprehensive auditing of Google Ads campaigns, including URL validati
 ## Tools
 
 ### `ads_audit.py`
-**Purpose**: Comprehensive Google Ads campaign audit tool for URL validation, UTM parameter enforcement, and asset compliance checking.
+**Purpose**: Comprehensive Google Ads campaign audit tool for URL validation, UTM parameter enforcement, asset compliance checking, and sitelink analysis.
 
 ## Core Features
 
@@ -29,11 +29,26 @@ Tools for comprehensive auditing of Google Ads campaigns, including URL validati
 - **Policy Compliance**: Check asset approval status
 - **Text Content Analysis**: Extract headlines and descriptions
 
+### Sitelink Asset Analysis
+- **Asset Discovery**: Locate all sitelink assets in the account
+- **Placement Mapping**: Map sitelinks to campaigns and ad groups
+- **Link Text Extraction**: Capture sitelink display text
+- **UI-Friendly Output**: Generate data for easy asset location in Google Ads UI
+
+### Advanced Landing Page Analysis
+- **Unexpanded URLs**: Direct final URLs as configured in ads
+- **Expanded URLs**: URLs after redirect resolution (when available)
+- **Performance Correlation**: 30-day clicks and impressions data
+- **Cross-Reference Mapping**: Ad-to-URL relationships for UI lookups
+
 ### Reporting & Output
 Generates comprehensive CSV reports:
 - `ads.csv` - Ad-level data with URLs and metadata
 - `rsa_assets.csv` - RSA headline and description assets
-- `landing_pages.csv` - Landing page performance data (30-day)
+- `landing_pages.csv` - Unexpanded landing page performance data (30-day)
+- `expanded_landing_pages.csv` - Landing pages after redirect resolution (30-day)
+- `ad_url_map.csv` - Ad-to-URL crosswalk for UI lookups
+- `sitelink_urls.csv` - Sitelink asset placement mapping
 - `findings.csv` - Audit issues and recommendations
 
 ## Usage Examples
@@ -50,6 +65,18 @@ python ads_audit.py \
   --out ./audit-results \
   --check-http \
   --timeout 10
+```
+
+### Comprehensive Asset Analysis
+```bash
+python ads_audit.py \
+  --customer-id 1234567890 \
+  --out ./audit-results \
+  --check-http \
+  --utm-required utm_source utm_medium utm_campaign utm_term \
+  --utm-case lower \
+  --utm-expect utm_medium=cpc \
+  --allow-autotag-only
 ```
 
 ### UTM Parameter Enforcement
@@ -146,10 +173,31 @@ Contains one row per RSA asset with:
 - Policy approval information
 
 ### `landing_pages.csv`
-Contains aggregated landing page data:
-- Unexpanded final URLs
+Contains aggregated unexpanded landing page data:
+- Unexpanded final URLs as configured in ads
 - 30-day clicks and impressions
 - Customer attribution
+
+### `expanded_landing_pages.csv`
+Contains aggregated expanded landing page data (when available):
+- Expanded final URLs after redirect resolution
+- 30-day clicks and impressions
+- Customer attribution
+- Note: Not available in all Google Ads accounts/API versions
+
+### `ad_url_map.csv`
+Contains ad-to-URL crosswalk data:
+- Ad ID, campaign ID, ad group ID
+- Full URL and URL without query parameters
+- Source type (ad.final_urls or ad.final_mobile_urls)
+- Useful for UI lookups and URL troubleshooting
+
+### `sitelink_urls.csv`
+Contains sitelink asset placement data:
+- Asset ID, name, and link text
+- Campaign or ad group placement
+- Placement type (campaign/ad_group)
+- Note: URL fields omitted for API v21 compatibility
 
 ### `findings.csv`
 Contains audit issues with:
@@ -184,6 +232,8 @@ Contains audit issues with:
 - **HTTP Checking**: Can be slow for large accounts (use `--timeout` to control)
 - **Memory Usage**: Processes data in streams for large accounts
 - **API Quotas**: Consider API quota consumption for frequent audits
+- **Expanded Landing Pages**: May not be available in all accounts, handled gracefully
+- **Sitelink Analysis**: Limited to placement mapping to maintain API v21 compatibility
 
 ## Dependencies
 
@@ -199,3 +249,6 @@ pip install google-ads requests tldextract
 4. **UTM governance**: Establish UTM parameter standards and enforce them consistently
 5. **Performance monitoring**: Use `--check-http` periodically to catch broken URLs
 6. **Output management**: Archive audit results with timestamps for trend analysis
+7. **Sitelink maintenance**: Use `sitelink_urls.csv` to locate and update sitelink assets in the UI
+8. **URL troubleshooting**: Use `ad_url_map.csv` for quick ad-to-URL lookups during issue resolution
+9. **Landing page analysis**: Compare `landing_pages.csv` and `expanded_landing_pages.csv` to identify redirect issues
