@@ -18,7 +18,9 @@ Outputs:
   ./out/landing_pages.csv           # URL-level aggregation from landing_page_view (unexpanded)
   ./out/expanded_landing_pages.csv  # URL-level aggregation after redirects
   ./out/ad_url_map.csv              # ad_id → URL(s) crosswalk for UI lookups
-  ./out/sitelink_urls.csv           # sitelink asset URLs by campaign/ad group
+  ./out/sitelink_urls.csv           # sitelink assets mapped to campaign/ad group (no URLs)
+  ./out/utm_analysis.csv            # UTM parameter coverage analysis per ad URL
+  ./out/homepage_analysis.csv       # homepage vs non-homepage destination analysis
   ./out/findings.csv                # audit findings (one row per finding)
 """
 from __future__ import annotations
@@ -37,6 +39,8 @@ import tldextract
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 
+
+# ---------- GAQL QUERIES ----------
 
 GAQL_ADS = """
 SELECT
@@ -80,7 +84,6 @@ WHERE
 """
 
 GAQL_LANDING_PAGES = """
--- Unexpanded landing page views (aggregates by final URL)
 SELECT
   customer.id,
   landing_page_view.unexpanded_final_url,
@@ -100,23 +103,52 @@ FROM expanded_landing_page_view
 WHERE segments.date DURING LAST_30_DAYS
 """
 
-# Sitelink URLs at both campaign and ad group levels
-GAQL_SITELINKS = """
+# Sitelink assets & placements (no URL fields to avoid v21 GAQL errors)
+GAQL_SITELINK_ASSETS = """
 SELECT
-  customer.id,
+  asset.resource_name,
   asset.id,
   asset.name,
-  asset.sitelink_asset.link_text,
-  asset.sitelink_asset.final_urls,
-  asset.sitelink_asset.final_mobile_urls,
-  campaign.id,
-  ad_group.id
+  asset.type,
+  asset.sitelink_asset.link_text
 FROM asset
-LEFT JOIN campaign_asset ON campaign_asset.asset = asset.resource_name
-LEFT JOIN ad_group_asset ON ad_group_asset.asset = asset.resource_name
 WHERE asset.type = 'SITELINK'
 """
 
+GAQL_SITELINK_CAMPAIGN_PLACEMENTS = """
+SELECT
+  campaign_asset.asset,
+  campaign_asset.field_type,
+  campaign_asset.status,
+  campaign.id,
+  campaign.name,
+  campaign.status
+FROM campaign_asset
+WHERE campaign_asset.field_type = 'SITELINK'
+  AND campaign.status = 'ENABLED'
+  AND campaign_asset.status = 'ENABLED'
+"""
+
+GAQL_SITELINK_ADGROUP_PLACEMENTS = """
+SELECT
+  ad_group_asset.asset,
+  ad_group_asset.field_type,
+  ad_group_asset.status,
+  ad_group.id,
+  ad_group.name,
+  ad_group.status,
+  campaign.id,
+  campaign.name,
+  campaign.status
+FROM ad_group_asset
+WHERE ad_group_asset.field_type = 'SITELINK'
+  AND campaign.status = 'ENABLED'
+  AND ad_group.status = 'ENABLED'
+  AND ad_group_asset.status = 'ENABLED'
+"""
+
+
+# ---------- UTIL ----------
 
 def ensure_out_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
@@ -147,7 +179,6 @@ def norm_domain(url: str) -> Optional[str]:
             return p.netloc.lower()
         root = ".".join(part for part in [ext.domain, ext.suffix] if part)
         sub = ext.subdomain
-        # return full host (sub + root) for exact matching
         host = ".".join([sub, root]) if sub else root
         return host.lower()
     except Exception:
@@ -186,6 +217,23 @@ def fetch_stream(client: GoogleAdsClient, customer_id: str, query: str, api_vers
         for row in batch.results:
             yield row
 
+def fetch_sitelink_asset_details(client, asset_resource_names, api_version):
+    svc = client.get_service("AssetService", version=api_version)
+    details = {}
+    for rn in asset_resource_names:
+        try:
+            a = svc.get_asset(resource_name=rn)
+            if a.type_.name == "SITELINK" and getattr(a, "sitelink_asset", None):
+                details[rn] = {
+                    "final_urls": list(getattr(a.sitelink_asset, "final_urls", [])),
+                    "final_mobile_urls": list(getattr(a.sitelink_asset, "final_mobile_urls", [])),
+                    "link_text": a.sitelink_asset.link_text,
+                }
+        except Exception:
+            details[rn] = {"final_urls": [], "final_mobile_urls": [], "link_text": ""}
+    return details
+
+# ---------- ROW BUILDERS ----------
 
 def rows_ads(client: GoogleAdsClient, customer_id: str, api_version: str) -> List[Dict[str, Any]]:
     out = []
@@ -279,22 +327,290 @@ def rows_expanded_landing_pages(client: GoogleAdsClient, customer_id: str, api_v
     return out
 
 
+def rows_utm_analysis(ads: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Analyze UTM parameter presence across all ads."""
+    analysis = []
+    
+    for ad in ads:
+        ad_id = ad["ad_id"]
+        campaign_id = ad["campaign_id"]
+        ad_group_id = ad["ad_group_id"]
+        campaign_name = ad.get("campaign_name", "")
+        ad_group_name = ad.get("ad_group_name", "")
+        
+        # Check all URL types
+        url_types = [
+            ("final_urls", ad.get("final_urls", [])),
+            ("final_mobile_urls", ad.get("final_mobile_urls", []))
+        ]
+        
+        for url_type, urls in url_types:
+            if not urls:
+                continue
+                
+            for url in urls:
+                params = parse_params(url)
+                
+                # Check for UTM parameters
+                utm_params = {k: v for k, v in params.items() if k.startswith('utm_')}
+                has_gclid = 'gclid' in params
+                
+                # Determine UTM status
+                if utm_params:
+                    utm_status = "has_utm"
+                    utm_count = len(utm_params)
+                    utm_list = list(utm_params.keys())
+                elif has_gclid:
+                    utm_status = "gclid_only" 
+                    utm_count = 0
+                    utm_list = []
+                else:
+                    utm_status = "no_tracking"
+                    utm_count = 0
+                    utm_list = []
+                
+                analysis.append({
+                    "ad_id": ad_id,
+                    "campaign_id": campaign_id,
+                    "ad_group_id": ad_group_id,
+                    "campaign_name": campaign_name,
+                    "ad_group_name": ad_group_name,
+                    "url_type": url_type,
+                    "url": url,
+                    "utm_status": utm_status,
+                    "utm_count": utm_count,
+                    "utm_parameters": ",".join(utm_list),
+                    "has_gclid": has_gclid
+                })
+    
+    return analysis
+
+
+def rows_non_homepage_analysis(ads: List[Dict[str, Any]], sitelinks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Identify ads sending traffic to non-homepage URLs."""
+    analysis = []
+    
+    # Define homepage patterns (customize these as needed)
+    homepage_patterns = [
+        r'^https?://[^/]+/?$',  # domain.com or domain.com/
+        r'^https?://[^/]+/index\.(html?|php)$',  # domain.com/index.html
+        r'^https?://[^/]+/home/?$',  # domain.com/home
+        r'^https?://[^/]+/\?.*$',  # domain.com/?params (homepage with params)
+    ]
+    
+    def is_homepage(url: str) -> bool:
+        """Check if URL appears to be a homepage."""
+        url_clean = url.split('#')[0]  # Remove fragments
+        return any(re.match(pattern, url_clean, re.IGNORECASE) for pattern in homepage_patterns)
+    
+    def extract_path_info(url: str) -> Dict[str, str]:
+        """Extract useful path information from URL."""
+        parsed = urlparse(url)
+        path = parsed.path.rstrip('/')
+        
+        # Categorize common URL patterns
+        if not path or path == '/':
+            category = "homepage"
+        elif '/product' in path.lower() or '/p/' in path.lower():
+            category = "product_page"
+        elif '/category' in path.lower() or '/cat/' in path.lower():
+            category = "category_page"
+        elif '/landing' in path.lower() or '/lp/' in path.lower():
+            category = "landing_page"
+        elif '/blog' in path.lower() or '/news' in path.lower():
+            category = "content_page"
+        elif '/about' in path.lower() or '/contact' in path.lower():
+            category = "info_page"
+        else:
+            category = "other_page"
+            
+        return {
+            "path": path,
+            "category": category,
+            "depth": len([p for p in path.split('/') if p])
+        }
+    
+    # Analyze ad URLs
+    for ad in ads:
+        ad_id = ad["ad_id"]
+        campaign_id = ad["campaign_id"]
+        ad_group_id = ad["ad_group_id"]
+        campaign_name = ad.get("campaign_name", "")
+        ad_group_name = ad.get("ad_group_name", "")
+        
+        # Check final URLs
+        for url_type in ["final_urls", "final_mobile_urls"]:
+            urls = ad.get(url_type, [])
+            for url in urls:
+                is_home = is_homepage(url)
+                path_info = extract_path_info(url)
+                
+                analysis.append({
+                    "ad_id": ad_id,
+                    "campaign_id": campaign_id,
+                    "ad_group_id": ad_group_id,
+                    "campaign_name": campaign_name,
+                    "ad_group_name": ad_group_name,
+                    "url_source": f"ad.{url_type}",
+                    "url": url,
+                    "is_homepage": is_home,
+                    "url_path": path_info["path"],
+                    "url_category": path_info["category"],
+                    "path_depth": path_info["depth"],
+                    "domain": norm_domain(url) or ""
+                })
+    
+    # Add sitelink analysis with actual URLs when available
+    for sitelink in sitelinks:
+        campaign_id = sitelink.get("campaign_id", "")
+        ad_group_id = sitelink.get("ad_group_id", "")
+        campaign_name = sitelink.get("campaign_name", "")
+        ad_group_name = sitelink.get("ad_group_name", "")
+        
+        # Process each final URL in the sitelink
+        final_urls = sitelink.get("final_urls", [])
+        if final_urls:
+            for url in final_urls:
+                is_home = is_homepage(url)
+                path_info = extract_path_info(url)
+                
+                analysis.append({
+                    "ad_id": "",  # Sitelinks aren't tied to specific ads
+                    "campaign_id": campaign_id,
+                    "ad_group_id": ad_group_id,
+                    "campaign_name": campaign_name,
+                    "ad_group_name": ad_group_name,
+                    "url_source": f"sitelink.{sitelink.get('placement', '')}",
+                    "url": url,
+                    "is_homepage": is_home,
+                    "url_path": path_info["path"],
+                    "url_category": path_info["category"],
+                    "path_depth": path_info["depth"],
+                    "domain": norm_domain(url) or "",
+                    "sitelink_text": sitelink.get("link_text", ""),
+                    "asset_id": sitelink.get("asset_id", "")
+                })
+        else:
+            # Fallback for sitelinks without URLs
+            if campaign_id or ad_group_id:
+                analysis.append({
+                    "ad_id": "",
+                    "campaign_id": campaign_id,
+                    "ad_group_id": ad_group_id,
+                    "campaign_name": campaign_name,
+                    "ad_group_name": ad_group_name,
+                    "url_source": f"sitelink.{sitelink.get('placement', '')}",
+                    "url": f"[SITELINK: {sitelink.get('link_text', 'Unknown')}]",
+                    "is_homepage": False,
+                    "url_path": "[sitelink_asset]",
+                    "url_category": "sitelink_destination",
+                    "path_depth": 0,
+                    "domain": "",
+                    "sitelink_text": sitelink.get("link_text", ""),
+                    "asset_id": sitelink.get("asset_id", "")
+                })
+    
+    return analysis
+
+
 def rows_sitelinks(client: GoogleAdsClient, customer_id: str, api_version: str) -> List[Dict[str, Any]]:
-    out = []
-    for row in fetch_stream(client, customer_id, GAQL_SITELINKS, api_version):
-        a = row.asset
+    """
+    Build sitelink placement rows (asset → campaign/ad group) with URLs when possible.
+    Uses direct GAQL queries to get sitelink assets with URLs.
+    """
+    out: List[Dict[str, Any]] = []
+
+    # 1) Fetch all sitelink assets with URLs directly via GAQL
+    assets: Dict[str, Dict[str, Any]] = {}
+    
+    # Try to get sitelink assets with URLs - fallback if not available
+    try:
+        sitelink_query = """
+        SELECT
+          asset.resource_name,
+          asset.id,
+          asset.name,
+          asset.type,
+          asset.sitelink_asset.link_text,
+          asset.sitelink_asset.final_urls,
+          asset.sitelink_asset.final_mobile_urls
+        FROM asset
+        WHERE asset.type = 'SITELINK'
+        """
+        
+        for row in fetch_stream(client, customer_id, sitelink_query, api_version):
+            a = row.asset
+            final_urls = list(getattr(a.sitelink_asset, 'final_urls', []))
+            final_mobile_urls = list(getattr(a.sitelink_asset, 'final_mobile_urls', []))
+            
+            assets[a.resource_name] = {
+                "asset_id": a.id,
+                "asset_name": getattr(a, "name", "") or "",
+                "link_text": getattr(a.sitelink_asset, 'link_text', ''),
+                "final_urls": final_urls,
+                "final_mobile_urls": final_mobile_urls,
+            }
+    except Exception as e:
+        # Fallback to basic asset info without URLs
+        try:
+            for row in fetch_stream(client, customer_id, GAQL_SITELINK_ASSETS, api_version):
+                a = row.asset
+                assets[a.resource_name] = {
+                    "asset_id": a.id,
+                    "asset_name": getattr(a, "name", "") or "",
+                    "link_text": getattr(a.sitelink_asset, 'link_text', ''),
+                    "final_urls": [],
+                    "final_mobile_urls": [],
+                    "url_fetch_error": str(e),
+                }
+        except Exception as e2:
+            print(f"Warning: Could not fetch sitelink assets: {e2}", file=sys.stderr)
+            return []
+
+    # 2) Campaign placements
+    for row in fetch_stream(client, customer_id, GAQL_SITELINK_CAMPAIGN_PLACEMENTS, api_version):
+        resname = row.campaign_asset.asset
+        a = assets.get(resname, {})
         out.append({
-            "customer_id": row.customer.id,
-            "asset_id": a.id,
-            "asset_name": getattr(a, "name", "") or "",
-            "link_text": a.sitelink_asset.link_text if getattr(a, "sitelink_asset", None) else "",
-            "final_urls": list(getattr(a.sitelink_asset, "final_urls", [])),
-            "final_mobile_urls": list(getattr(a.sitelink_asset, "final_mobile_urls", [])),
-            "campaign_id": row.campaign.id if getattr(row, "campaign", None) else "",
-            "ad_group_id": row.ad_group.id if getattr(row, "ad_group", None) else "",
+            "customer_id": customer_id,
+            "asset_id": a.get("asset_id", ""),
+            "asset_name": a.get("asset_name", ""),
+            "link_text": a.get("link_text", ""),
+            "final_urls": a.get("final_urls", []),
+            "final_mobile_urls": a.get("final_mobile_urls", []),
+            "campaign_id": row.campaign.id,
+            "campaign_name": getattr(row.campaign, 'name', ''),
+            "ad_group_id": "",
+            "ad_group_name": "",
+            "placement": "campaign",
+            "placement_status": getattr(row.campaign_asset, 'status', ''),
+            "url_fetch_error": a.get("url_fetch_error", ""),
         })
+
+    # 3) Ad group placements
+    for row in fetch_stream(client, customer_id, GAQL_SITELINK_ADGROUP_PLACEMENTS, api_version):
+        resname = row.ad_group_asset.asset
+        a = assets.get(resname, {})
+        out.append({
+            "customer_id": customer_id,
+            "asset_id": a.get("asset_id", ""),
+            "asset_name": a.get("asset_name", ""),
+            "link_text": a.get("link_text", ""),
+            "final_urls": a.get("final_urls", []),
+            "final_mobile_urls": a.get("final_mobile_urls", []),
+            "campaign_id": row.campaign.id,
+            "campaign_name": getattr(row.campaign, 'name', ''),
+            "ad_group_id": row.ad_group.id,
+            "ad_group_name": getattr(row.ad_group, 'name', ''),
+            "placement": "ad_group",
+            "placement_status": getattr(row.ad_group_asset, 'status', ''),
+            "url_fetch_error": a.get("url_fetch_error", ""),
+        })
+
     return out
 
+
+# ---------- AUDIT ----------
 
 def audit_findings(
     ads: List[Dict[str, Any]],
@@ -442,6 +758,8 @@ def audit_findings(
     return findings
 
 
+# ---------- MAIN ----------
+
 def main():
     parser = argparse.ArgumentParser(description="Audit enabled Google Ads URLs & RSA assets.")
     parser.add_argument("--customer-id", help="Customer ID (without dashes), e.g., 1234567890")
@@ -492,9 +810,7 @@ def main():
         res = cust_svc.list_accessible_customers()
         print("# Accounts:")
         for rn in res.resource_names:
-            # rn like 'customers/1234567890' → CID:
             cid = rn.split("/")[1]
-            # Fetch a few fields about the customer
             q = ("SELECT customer.id, customer.descriptive_name, "
                  "customer.currency_code, customer.time_zone, "
                  "customer.manager FROM customer LIMIT 1")
@@ -567,6 +883,15 @@ def main():
         )
         print(f"  findings: {len(findings)}", file=sys.stderr)
 
+        # Generate additional analysis
+        print("Analyzing UTM parameter coverage ...", file=sys.stderr)
+        utm_analysis = rows_utm_analysis(ads)
+        print(f"  UTM analysis rows: {len(utm_analysis)}", file=sys.stderr)
+        
+        print("Analyzing non-homepage destinations ...", file=sys.stderr)
+        homepage_analysis = rows_non_homepage_analysis(ads, sitelinks)
+        print(f"  Homepage analysis rows: {len(homepage_analysis)}", file=sys.stderr)
+
         # Write CSVs
         write_csv(
             os.path.join(args.out, "ads.csv"),
@@ -602,12 +927,22 @@ def main():
         write_csv(
             os.path.join(args.out, "sitelink_urls.csv"),
             sitelinks,
-            ["customer_id","asset_id","asset_name","link_text","final_urls","final_mobile_urls","campaign_id","ad_group_id"],
+            ["customer_id","asset_id","asset_name","link_text","final_urls","final_mobile_urls","campaign_id","campaign_name","ad_group_id","ad_group_name","placement","placement_status","url_fetch_error"],
         )
         write_csv(
             os.path.join(args.out, "findings.csv"),
             findings,
             ["ad_id","severity","issue","detail"],
+        )
+        write_csv(
+            os.path.join(args.out, "utm_analysis.csv"),
+            utm_analysis,
+            ["ad_id","campaign_id","ad_group_id","campaign_name","ad_group_name","url_type","url","utm_status","utm_count","utm_parameters","has_gclid"],
+        )
+        write_csv(
+            os.path.join(args.out, "homepage_analysis.csv"),
+            homepage_analysis,
+            ["ad_id","campaign_id","ad_group_id","campaign_name","ad_group_name","url_source","url","is_homepage","url_path","url_category","path_depth","domain","sitelink_text","asset_id"],
         )
 
         print(f"Done. Files in: {os.path.abspath(args.out)}", file=sys.stderr)

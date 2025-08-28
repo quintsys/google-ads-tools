@@ -41,6 +41,12 @@ Tools for comprehensive auditing of Google Ads campaigns, including URL validati
 - **Performance Correlation**: 30-day clicks and impressions data
 - **Cross-Reference Mapping**: Ad-to-URL relationships for UI lookups
 
+### Strategic Analysis
+- **UTM Coverage Analysis**: Identify ads with missing or incomplete tracking parameters
+- **Homepage vs Deep-Link Analysis**: Find ads directing traffic to specific pages vs homepage
+- **Traffic Source Mapping**: Categorize how users reach different URL destinations
+- **URL Pattern Recognition**: Classify URL types (product pages, landing pages, content, etc.)
+
 ### Reporting & Output
 Generates comprehensive CSV reports:
 - `ads.csv` - Ad-level data with URLs and metadata
@@ -49,6 +55,8 @@ Generates comprehensive CSV reports:
 - `expanded_landing_pages.csv` - Landing pages after redirect resolution (30-day)
 - `ad_url_map.csv` - Ad-to-URL crosswalk for UI lookups
 - `sitelink_urls.csv` - Sitelink asset placement mapping
+- `utm_analysis.csv` - UTM parameter coverage analysis per ad URL
+- `homepage_analysis.csv` - Homepage vs non-homepage destination analysis  
 - `findings.csv` - Audit issues and recommendations
 
 ## Usage Examples
@@ -199,6 +207,26 @@ Contains sitelink asset placement data:
 - Placement type (campaign/ad_group)
 - Note: URL fields omitted for API v21 compatibility
 
+### `utm_analysis.csv`
+Contains UTM parameter analysis per ad URL:
+- Ad hierarchy (ad ID, campaign, ad group)
+- URL type (final_urls or final_mobile_urls)
+- Full URL being analyzed
+- UTM status (has_utm, gclid_only, no_tracking)
+- Count of UTM parameters found
+- List of UTM parameter names
+- Presence of gclid auto-tagging
+
+### `homepage_analysis.csv`
+Contains homepage vs non-homepage destination analysis:
+- Ad hierarchy and URL source information
+- Full URL and extracted path
+- Homepage classification (true/false)
+- URL category (homepage, product_page, landing_page, etc.)
+- Path depth (number of subdirectories)
+- Domain information
+- Includes sitelink destinations as potential non-homepage sources
+
 ### `findings.csv`
 Contains audit issues with:
 - Ad ID reference
@@ -252,3 +280,5 @@ pip install google-ads requests tldextract
 7. **Sitelink maintenance**: Use `sitelink_urls.csv` to locate and update sitelink assets in the UI
 8. **URL troubleshooting**: Use `ad_url_map.csv` for quick ad-to-URL lookups during issue resolution
 9. **Landing page analysis**: Compare `landing_pages.csv` and `expanded_landing_pages.csv` to identify redirect issues
+10. **UTM governance**: Use `utm_analysis.csv` to identify ads missing tracking parameters
+11. **Traffic strategy**: Use `homepage_analysis.csv` to understand which ads drive traffic to specific pages vs homepage
